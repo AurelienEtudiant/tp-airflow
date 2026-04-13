@@ -6,6 +6,18 @@ Projet de formation : orchestration avec **Apache Airflow 3**, **MinIO** (S3-com
 
 ---
 
+## Note de contexte (consignes et contraintes)
+
+Le travail a ete realise en respectant la consigne fonctionnelle (integration dans le depot commun), avec des ajustements techniques necessaires pendant l'integration :
+
+- charge CPU/RAM elevee quand les stacks et services NLP tournent simultanement ;
+- consommation NLP importante (duree des runs, timeouts/retries possibles) ;
+- instabilites ponctuelles en environnement de formation (orchestration multi-services).
+
+Ces points expliquent certains choix d'organisation/reintegration, sans changement d'objectif : garder une solution commune, executable et conforme aux livrables attendus.
+
+---
+
 ## Structure du dépôt (livrables)
 
 | Emplacement | Rôle |
