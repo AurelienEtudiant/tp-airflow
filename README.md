@@ -38,6 +38,22 @@ docker run --rm --network host minio/mc alias set myminio http://localhost:9000 
 # 6) Vérifier les logs
 docker compose logs -f airflow-scheduler
 
+## Tests
+
+```bash
+# Lancer tous les tests
+docker compose exec airflow-worker pytest tests/ -v
+
+# Lancer les tests du fetcher RSS
+docker compose exec airflow-worker pytest tests/test_rss_fetcher.py -v
+
+# Lancer les tests du consumer RSS
+docker compose exec airflow-worker pytest tests/test_rss_consumer.py -v
+
+# Lancer les tests avec rapport de couverture
+docker compose exec airflow-worker pytest tests/ -v --cov=dags --cov-report=html
+
+
 ## Choix techniques
 Airflow + SequentialExecutor : orchestration simple et lisible pour le développement. Permet de gérer le consumer Kafka proprement avec close() entre les exécutions et évite les deadlocks.
 Kafka (Bitnami) : découplage producteur/consommateur, garantit la durabilité des messages et facilite le scaling futur.
