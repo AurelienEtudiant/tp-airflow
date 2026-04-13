@@ -20,10 +20,6 @@ class MinioHook(S3Hook):
     conn_name_attr = "aws_conn_id"
     default_conn_name = MINIO_CONN_ID
 
-    def __init__(self, minio_conn_id="minio_default"):
-        self.minio_conn_id = minio_conn_id
-        self.conn = BaseHook.get_connection(minio_conn_id)
-
     # ------------------------------------------------------------------ #
     # Helpers métier                                                        #
     # ------------------------------------------------------------------ #
@@ -102,25 +98,3 @@ class MinioHook(S3Hook):
             paths.append(path)
         logger.info(f"bulk_store_articles : {len(paths)} articles stockés dans {bucket}")
         return paths
-    
-    def get_client(self):
-        extras = self.conn.extra_dejson if self.conn.extra else {}
-        endpoint_url = extras.get("endpoint_url", f"{self.conn.host}:9000")
-
-        if endpoint_url.startswith("http://"):
-            endpoint_url = endpoint_url.replace("http://", "")
-        elif endpoint_url.startswith("https://"):
-            endpoint_url = endpoint_url.replace("https://", "")
-
-        return Minio(
-            endpoint=endpoint_url,
-            access_key=self.conn.login,
-            secret_key=self.conn.password,
-            secure=False,
-        )
-
-
-
-    
-
-    
