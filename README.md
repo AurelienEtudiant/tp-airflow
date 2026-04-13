@@ -2,7 +2,7 @@
 
 ## Membres
 - Aurélien L — Ecriture des flux RSS (avec dags et kafka, stockage de ceux-ci dans MinIO)
-- Massaer D - Ecriture du service NLP (classification zero-shot + sentiment) et intégration dans les DAGs Airflow
+- Massaer D - Ecriture du service NLP (classification zero-shot + sentiment + enrichment) et intégration dans les DAGs Airflow
 
 ## Stack
 - Airflow 2.7.1
@@ -16,27 +16,45 @@
 | rss_fetcher   | Récupère les flux RSS, normalise les articles et publie sur Kafka `articles` | Configurable (ex: 5 min)    |
 | rss_consumer  | Consomme `articles`, traite chaque message (NLP + enrichissement) et stocke dans MinIO `articles-bucket` | Continu (polling) |
 
-# Topics et groupes
-Topic Kafka : articles
+## Topics et groupes
+Topic Kafka : articles  
 Groupe consumer : airflow-rss-consumer
 
-# 1) Lancer les services
+## Lancement rapide
+
+### 1) Lancer les services
+```bash
 docker compose up -d
+```
 
-# 2) Attendre ~60s que tout démarre
+### 2) Attendre ~60s que tout démarre
+```bash
 sleep 60
+```
 
-# 3) Créer le topic Kafka
+### 3) Créer le topic Kafka
+```bash
 docker exec -it $(docker ps -qf "name=kafka") bash -c "kafka-topics.sh --create --topic articles --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1" || echo "Topic exists ou erreur."
+```
 
-# 4) Créer le bucket MinIO (optionnel)
+### 4) Créer le bucket MinIO (optionnel)
+```bash
 docker run --rm --network host minio/mc alias set myminio http://localhost:9000 minioadmin minioadmin && docker run --rm --network host minio/mc mb myminio/articles-bucket || echo "Bucket exists."
+```
 
-# 5) Accéder à l'UI Airflow
-# → http://localhost:8080 (admin / admin)
+### 5) Accéder à l'UI Airflow
+- **Une seule stack (ingestion à la racine de ce dépôt)** : [http://localhost:8080](http://localhost:8080) (`admin` / `admin`)
+- **Les deux stacks en même temps** (ingestion décalée + NLP dans [Projet_Airflow](./Projet_Airflow/)) :
+  1. À la **racine de ce dépôt** : `docker compose -f compose.yaml -f compose.parallel-projet.yaml up -d` → UI ingestion : [http://localhost:38080](http://localhost:38080) (`admin` / `admin`)
+  2. Dans **`Projet_Airflow/`** : `docker compose up -d` → UI enrichissement NLP : [http://localhost:8080](http://localhost:8080) (`admin` / `admin`)  
+  MinIO partagé côté hôte pour le data lake : **:39000** (voir `compose.parallel-projet.yaml`).
 
-# 6) Vérifier les logs
+**Suite du projet (NLP, DAGs `newsradar_*`)** : dossier **[Projet_Airflow](./Projet_Airflow/)** 
+
+### 6) Vérifier les logs
+```bash
 docker compose logs -f airflow-scheduler
+```
 
 ## Tests
 
@@ -55,10 +73,10 @@ docker compose exec airflow-worker pytest tests/ -v --cov=dags --cov-report=html
 
 
 ## Choix techniques
-Airflow + SequentialExecutor : orchestration simple et lisible pour le développement. Permet de gérer le consumer Kafka proprement avec close() entre les exécutions et évite les deadlocks.
-Kafka (Bitnami) : découplage producteur/consommateur, garantit la durabilité des messages et facilite le scaling futur.
-MinIO : stockage objet compatible S3, simple à déployer en local et migrable vers S3/GCS en production.
-Commit manuel : garantit que les partitions Kafka se libèrent après traitement et upload réussi dans MinIO. Évite les accumulations d'offsets et les messages non traités.
+Airflow + SequentialExecutor : orchestration simple et lisible pour le développement. Permet de gérer le consumer Kafka proprement avec close() entre les exécutions et évite les deadlocks.  
+Kafka (Bitnami) : découplage producteur/consommateur, garantit la durabilité des messages et facilite le scaling futur.  
+MinIO : stockage objet compatible S3, simple à déployer en local et migrable vers S3/GCS en production.  
+Commit manuel : garantit que les partitions Kafka se libèrent après traitement et upload réussi dans MinIO. Évite les accumulations d'offsets et les messages non traités.  
 DAG rss_consumer avec polling continu : permet de traiter les articles dès leur arrivée sur Kafka sans attendre un schedule fixe.
 
 ## Architecture
@@ -87,3 +105,4 @@ flowchart LR
   PARTITION -.-> NOTE1
 
   classDef note fill:#fff3cd,stroke:#856404,color:#856404;
+```
