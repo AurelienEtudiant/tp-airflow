@@ -25,13 +25,11 @@ Ce projet orchestre la collecte et le traitement d'un flux RSS via Airflow, Kafk
 ## Bonnes pratiques pour libérer les partitions
 - Désactiver l'auto-commit (`enable_auto_commit=False`) et effectuer un commit explicite après succès du traitement et de l'upload vers MinIO.
 - Après commit, appeler `consumer.close()` (ou `consumer.unsubscribe()` puis `consumer.close()`) pour quitter le groupe et libérer la partition.
-- Si le DAG doit traiter un lot limité, s'assurer que le consumer boucle uniquement sur le nombre d'items attendus puis se ferme.
 
 ## Notes de dépannage rapides
 - `InvalidSessionTimeoutError` : vérifier la valeur `session_timeout_ms` du consumer (doit être dans la plage acceptée par le broker).
 - `NodeNotReadyError` / `MemberIdRequiredError` : problèmes temporaires de coordination Kafka — retenter la jointure du groupe.
 - Empty assignment (mise à jour des partitions à `[]`) : soit le topic n'a pas de partitions, soit le consumer n'a pas de permissions, soit la configuration du subscription filter ne matche rien.
-- Toujours logguer les étapes clés (join/leave group, commit, upload MinIO) pour tracer pourquoi un objet n'est pas présent dans le bucket.
 
 
 # bash
