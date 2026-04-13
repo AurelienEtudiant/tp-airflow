@@ -45,7 +45,7 @@ docker compose logs -f airflow-scheduler
 docker compose exec airflow-worker pytest tests/ -v
 
 # Lancer les tests du fetcher RSS
-docker compose exec airflow-worker pytest tests/test_rss_fetcher.py -v
+docker compose exec airflow-worker pytest tests/test_rss_producer.py -v
 
 # Lancer les tests du consumer RSS
 docker compose exec airflow-worker pytest tests/test_rss_consumer.py -v
