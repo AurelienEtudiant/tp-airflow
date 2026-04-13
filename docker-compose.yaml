@@ -1,0 +1,447 @@
+# ============================================================
+# NewsRadar - Docker Compose
+# Stack : Airflow 3.1.8 + PostgreSQL 18 + MinIO + OpenSearch 3.6 + NLP Service
+# ============================================================
+
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.1.8}
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres-airflow/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # StatsD -> Prometheus (bonus observabilité)
+    AIRFLOW__METRICS__STATSD_ON: 'false'
+    AIRFLOW__METRICS__STATSD_HOST: statsd-exporter
+    AIRFLOW__METRICS__STATSD_PORT: '9125'
+    AIRFLOW__METRICS__STATSD_PREFIX: airflow
+    # Connexions pré-configurées
+    AIRFLOW_CONN_POSTGRES_NEWSRADAR: >-
+      postgresql://news_user:news_password@postgres-newsradar:5432/newsradar
+    AIRFLOW_CONN_MINIO_S3: >-
+      aws://minioadmin:minioadmin@?endpoint_url=http%3A%2F%2Fminio%3A9000&region_name=us-east-1
+    AIRFLOW_CONN_OPENSEARCH_DEFAULT: >-
+      http://opensearch:9200
+    AIRFLOW_CONN_NLP_SERVICE: >-
+      http://nlp-service:8000
+    AIRFLOW_CONN_NEWS_API: >-
+      http://api-news-simulee:5500
+    # Variables Airflow
+    AIRFLOW_VAR_MINIO_BUCKET: newsradar-raw
+    AIRFLOW_VAR_NEWS_API_TOKEN: formation-token-2026
+    AIRFLOW_VAR_NLP_BATCH_SIZE: '50'
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      apache-airflow-providers-postgres
+      apache-airflow-providers-amazon
+      opensearch-py
+      feedparser
+      beautifulsoup4
+      httpx
+      lxml
+  volumes:
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/fixtures:/opt/airflow/fixtures
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    redis:
+      condition: service_healthy
+    postgres-airflow:
+      condition: service_healthy
+  networks:
+    - airflow-net
+
+services:
+
+  # ==================== BASES DE DONNÉES ====================
+
+  postgres-airflow:
+    image: postgres:18
+    container_name: newsradar-postgres-airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pg-airflow-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+    networks:
+      - airflow-net
+
+  postgres-newsradar:
+    image: postgres:18
+    container_name: newsradar-postgres-news
+    environment:
+      POSTGRES_USER: news_user
+      POSTGRES_PASSWORD: news_password
+      POSTGRES_DB: newsradar
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg-news-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "news_user", "-d", "newsradar"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+    networks:
+      - airflow-net
+
+  # ==================== REDIS (Celery broker) ====================
+
+  redis:
+    image: redis:7-alpine
+    container_name: newsradar-redis
+    expose:
+      - 6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+    restart: always
+    networks:
+      - airflow-net
+
+  # ==================== MINIO (Object storage) ====================
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: newsradar-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: always
+    networks:
+      - airflow-net
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: newsradar-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/newsradar-raw;
+      mc anonymous set none local/newsradar-raw;
+      echo '✅ Bucket newsradar-raw créé';
+      exit 0;
+      "
+    networks:
+      - airflow-net
+
+  # ==================== OPENSEARCH ====================
+
+  opensearch:
+    image: opensearchproject/opensearch:3.6.0
+    container_name: newsradar-opensearch
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    environment:
+      - cluster.name=newsradar-cluster
+      - node.name=opensearch-node1
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx1g"
+      - "DISABLE_SECURITY_PLUGIN=true"        # FORMATION UNIQUEMENT
+      - "DISABLE_INSTALL_DEMO_CONFIG=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - os-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -qv '\"status\":\"red\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: always
+    networks:
+      - airflow-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.6.0
+    container_name: newsradar-opensearch-dashboards
+    ports:
+      - "5601:5601"
+    environment:
+      - 'OPENSEARCH_HOSTS=["http://opensearch:9200"]'
+      - "DISABLE_SECURITY_DASHBOARDS_PLUGIN=true"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    restart: always
+    networks:
+      - airflow-net
+
+  opensearch-init:
+    image: curlimages/curl:8.5.0
+    container_name: newsradar-opensearch-init
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    volumes:
+      - ./opensearch:/opensearch:ro
+    entrypoint: >
+      /bin/sh -c "
+      echo '⏳ Attente OpenSearch...';
+      sleep 10;
+      curl -sf http://opensearch:9200/_cluster/health || exit 1;
+      echo '📦 Création index articles...';
+      curl -s -X DELETE http://opensearch:9200/articles 2>/dev/null || true;
+      curl -s -X PUT http://opensearch:9200/articles
+        -H 'Content-Type: application/json'
+        -d @/opensearch/articles_mapping.json;
+      echo '';
+      echo '✅ Index articles créé';
+      curl -s http://opensearch:9200/articles/_mapping | head -c 200;
+      exit 0;
+      "
+    networks:
+      - airflow-net
+
+  # ==================== NLP SERVICE ====================
+
+  nlp-service:
+    build:
+      context: ./nlp-service
+      dockerfile: Dockerfile
+    container_name: newsradar-nlp-service
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_SENTIMENT=distilbert-base-uncased-finetuned-sst-2-english
+      - MODEL_CLASSIFY=facebook/bart-large-mnli
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - hf-cache:/root/.cache/huggingface     # CRITIQUE : cache des modèles
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s   # Laisse le temps de charger les modèles
+    restart: always
+    networks:
+      - airflow-net
+
+  # ==================== API NEWS SIMULÉE ====================
+
+  api-news-simulee:
+    build:
+      context: ./api-news-simulee
+      dockerfile: Dockerfile
+    container_name: newsradar-api-news
+    ports:
+      - "5500:5500"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5500/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    networks:
+      - airflow-net
+
+  # ==================== AIRFLOW ====================
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: newsradar-airflow-apiserver
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: newsradar-airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: newsradar-airflow-dag-processor
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob --hostname \"$${HOSTNAME}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-worker:
+    <<: *airflow-common
+    container_name: newsradar-airflow-worker
+    command: celery worker
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: '0'
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" -t 10'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: newsradar-airflow-triggerer
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: newsradar-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        if [[ -z "${AIRFLOW_UID}" ]]; then
+          echo -e "\033[1;33mWARNING!!!: AIRFLOW_UID not set!\e[0m"
+          echo "If you are on Linux, you SHOULD follow the instructions below to set "
+          echo "AIRFLOW_UID environment variable, otherwise files will be owned by root."
+          echo "For other operating systems you can get rid of the warning with manually created .env file:"
+          echo "    See: https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#setting-the-right-airflow-user"
+        fi
+        one_meg=1048576
+        mem_available=$$(($$(getconf _PHYS_PAGES) * $$(getconf PAGE_SIZE) / one_meg))
+        cpus_available=$$(grep -cE 'cpu[0-9]+' /proc/stat)
+        disk_available=$$(df / | tail -1 | awk '{print $$4}')
+        warning_resources="false"
+        if (( mem_available < 4000 )) ; then
+          echo -e "\033[1;33mWARNING!!!: Not enough memory available for Docker.\e[0m"
+          warning_resources="true"
+        fi
+        if (( cpus_available < 2 )); then
+          echo -e "\033[1;33mWARNING!!!: Not enough CPUS available for Docker.\e[0m"
+          warning_resources="true"
+        fi
+        if (( disk_available < one_meg * 10 )); then
+          echo -e "\033[1;33mWARNING!!!: Not enough Disk space available for Docker.\e[0m"
+          warning_resources="true"
+        fi
+        if [[ $${warning_resources} == "true" ]]; then
+          echo -e "\033[1;33mWARNING!!!: You have not enough resources to run Airflow (see above)!\e[0m"
+          echo "Please follow the instructions to increase amount of resources available:"
+          echo "   https://airflow.apache.org/docs/apache-airflow/stable/howto/docker-compose/index.html#before-you-begin"
+        fi
+        mkdir -p /sources/logs /sources/dags /sources/plugins /sources/config
+        chown -R "${AIRFLOW_UID}:0" /sources/{logs,dags,plugins,config}
+        exec /entrypoint airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+      _PIP_ADDITIONAL_REQUIREMENTS: ''
+    user: "0:0"
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}:/sources
+
+  airflow-cli:
+    <<: *airflow-common
+    container_name: newsradar-airflow-cli
+    profiles:
+      - debug
+    environment:
+      <<: *airflow-common-env
+      CONNECTION_CHECK_MAX_COUNT: "0"
+    command:
+      - bash
+      - -c
+      - airflow
+
+# ==================== VOLUMES ====================
+
+volumes:
+  pg-airflow-data:
+  pg-news-data:
+  minio-data:
+  os-data:
+  hf-cache:                 # CRITIQUE : cache HuggingFace, ne pas supprimer
+  grafana-data:
+  prometheus-data:
+
+# ==================== NETWORKS ====================
+
+networks:
+  airflow-net:
+    driver: bridge
