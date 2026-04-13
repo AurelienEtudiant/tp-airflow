@@ -41,3 +41,32 @@ docker exec -it $(docker ps -qf "name=kafka") bash -c "kafka-topics.sh --create 
 
 # 4) Vérifier logs Airflow / consumer pour s'assurer qu'on upload vers MinIO (et que MINIO_ENDPOINT est défini)
 docker compose logs -f airflow-web
+
+## Architecture et flux
+
+```mermaid
+flowchart LR
+  subgraph "Infrastructure (docker-compose)"
+    direction TB
+    ZK["Zookeeper"]
+    KAFKA["Kafka broker"]
+    MINIO["MinIO"]
+    AIRFLOW["Airflow (web / scheduler)"]
+  end
+
+  RSS["Sources RSS"] --> FETCHER["DAG: rss_fetcher\n(producer)"]
+  FETCHER -->|publie sur| TOPIC["Topic: articles"]
+  TOPIC -->|s'abonne| CONSUMER["DAG: rss_consumer\n(groupe: airflow-rss-consumer)"]
+  CONSUMER --> PROCESS["Traitement (validation / enrichissement)"]
+  PROCESS --> MINIO_BUCKET["MinIO: articles-bucket\n(storage)"]
+
+  PROCESS -->|si succès → commit & fermer| COMMIT["consumer.commit()\nconsumer.close()"]
+  COMMIT -->|libère| PARTITION["Partition libérée"]
+
+  CONSUMER -.-> EMPTY_ASSIGN["Assignment vide → partitions = []"]
+  NOTE1["Problèmes courants:\n- enable_auto_commit=False et commit explicite\n- fermer consumer pour libérer partition\n- vérifier MINIO_ENDPOINT"]:::note
+  PARTITION -.-> NOTE1
+
+  classDef note fill:#fff3cd,stroke:#856404,color:#856404;
+```
+
