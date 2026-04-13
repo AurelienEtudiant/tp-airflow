@@ -1,0 +1,8 @@
+{"timestamp":"2026-04-10T13:00:01.429659Z","level":"info","event":"DAG bundles loaded: dags-folder","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager","filename":"manager.py","lineno":209}
+{"timestamp":"2026-04-10T13:00:01.431179Z","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/generate_rss.py","logger":"airflow.dag_processing.dagbag.BundleDagBag","filename":"dagbag.py","lineno":469}
+{"timestamp":"2026-04-10T13:00:01.431880Z","level":"error","event":"Dag not found during start up","dag_id":"rss_producer","bundle":"BundleInfo(name='dags-folder', version=None)","path":"generate_rss.py","logger":"task","filename":"task_runner.py","lineno":788}
+{"timestamp":"2026-04-10T13:00:01.432841Z","level":"warning","event":"Rescheduling task during startup, marking task as UP_FOR_RESCHEDULE","logger":"task","filename":"task_runner.py","lineno":1862}
+{"timestamp":"2026-04-10T13:01:01.740602Z","level":"info","event":"DAG bundles loaded: dags-folder","logger":"airflow.dag_processing.bundles.manager.DagBundlesManager","filename":"manager.py","lineno":209}
+{"timestamp":"2026-04-10T13:01:01.741009Z","level":"info","event":"Filling up the DagBag from /opt/airflow/dags/generate_rss.py","logger":"airflow.dag_processing.dagbag.BundleDagBag","filename":"dagbag.py","lineno":469}
+{"timestamp":"2026-04-10T13:01:01.741408Z","level":"error","event":"Dag not found during start up","dag_id":"rss_producer","bundle":"BundleInfo(name='dags-folder', version=None)","path":"generate_rss.py","logger":"task","filename":"task_runner.py","lineno":788}
+{"timestamp":"2026-04-10T13:01:01.741617Z","level":"warning","event":"Rescheduling task during startup, marking task as UP_FOR_RESCHEDULE","logger":"task","filename":"task_runner.py","lineno":1862}
