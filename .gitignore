@@ -1,0 +1,33 @@
+# Racine monorepo TP (tp-airflow + Projet_Airflow)
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Airflow / Docker — logs locaux (chemins parfois invalides sous Windows)
+logs/
+*.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# GitKraken / outils locaux (optionnel)
+.gk/
+
+# Archives redondantes avec le code versionné (décompresser ailleurs si besoin)
+*.zip

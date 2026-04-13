@@ -1,0 +1,41 @@
+# Ports hotes decales : stack tp-airflow en parallele de Projet_Airflow (memes services, pas de conflit).
+# Le compose.yaml de base ne publie plus de ports (evite fusion concatenatee) : ce fichier est obligatoire pour l'acces hote.
+# Usage : docker compose -f compose.yaml -f compose.parallel-projet.yaml up -d [--build]
+# Kafka UI (port 38888) : ajouter --profile ui
+# Bucket MinIO data-lake (minio/mc) : ajouter --profile seed une fois MinIO up, ou creer le bucket manuellement
+# Tp-airflow seul (sans Projet) : docker compose -f compose.yaml -f compose.default-ports.yaml up -d
+name: tp-airflow-ingest
+
+services:
+  postgres-airflow:
+    ports: ["36432:5432"]
+  postgres-dwh:
+    ports: ["36433:5432"]
+  postgres-source:
+    ports: ["36434:5432"]
+  redis:
+    ports: ["36379:6379"]
+  minio:
+    ports:
+      - "39000:9000"
+      - "39001:9001"
+  api-simulee:
+    ports: ["35001:5000"]
+  airflow-apiserver:
+    ports: ["38080:8080"]
+  nlp-service:
+    ports: ["38000:8000"]
+  opensearch:
+    ports:
+      - "39200:9200"
+      - "39600:9600"
+  opensearch-dashboards:
+    ports: ["35601:5601"]
+  zookeeper:
+    ports: ["32181:2181"]
+  kafka:
+    ports:
+      - "39092:9092"
+      - "32902:29092"
+  kafka-ui:
+    ports: ["38888:8080"]

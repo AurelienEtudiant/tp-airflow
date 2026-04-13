@@ -1,0 +1,36 @@
+# Ports hotes par defaut quand tp-airflow tourne SEUL (sans Projet_Airflow sur les memes ports).
+# Usage : docker compose -f compose.yaml -f compose.default-ports.yaml up -d
+
+services:
+  postgres-airflow:
+    ports: ["5432:5432"]
+  postgres-dwh:
+    ports: ["5433:5432"]
+  postgres-source:
+    ports: ["5434:5432"]
+  redis:
+    ports: ["6379:6379"]
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+  api-simulee:
+    ports: ["5001:5000"]
+  airflow-apiserver:
+    ports: ["8080:8080"]
+  nlp-service:
+    ports: ["8000:8000"]
+  opensearch:
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+  opensearch-dashboards:
+    ports: ["5601:5601"]
+  zookeeper:
+    ports: ["2181:2181"]
+  kafka:
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+  kafka-ui:
+    ports: ["8888:8080"]
