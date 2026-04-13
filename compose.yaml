@@ -48,6 +48,10 @@ x-airflow-common: &airflow-common
       faker
       kafka-python
       minio
+      pytest
+      pytest-cov
+      pytest-mock
+      
 
   volumes:
     - ./dags:/opt/airflow/dags
