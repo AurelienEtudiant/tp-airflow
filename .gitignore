@@ -30,3 +30,26 @@ bin/
 .DS_Store
 .env
 vsc.xml
+
+# Logs Airflow
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env (ne jamais commiter les secrets)
+.env
+
+# Docker volumes locaux
+minio-data/
+pg-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp

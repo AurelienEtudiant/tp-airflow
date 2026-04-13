@@ -3,6 +3,7 @@
 ## Membres
 - Aurélien L — Ecriture des flux RSS (avec dags et kafka, stockage de ceux-ci dans MinIO)
 - Massaer D - Ecriture du service NLP (classification zero-shot + sentiment + enrichment) et intégration dans les DAGs Airflow
+- Salma Bentisse — Docker Compose + SQL + MinIO + OpenSearch
 
 ## Stack
 - Airflow 2.7.1

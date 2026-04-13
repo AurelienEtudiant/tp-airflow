@@ -1,0 +1,69 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "newsradar_analyzer": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "stop", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "article_id": {
+        "type": "keyword"
+      },
+      "source_id": {
+        "type": "keyword"
+      },
+      "url": {
+        "type": "keyword",
+        "ignore_above": 2048
+      },
+      "title": {
+        "type": "text",
+        "analyzer": "newsradar_analyzer",
+        "fields": {
+          "keyword": {
+            "type": "keyword",
+            "ignore_above": 512
+          }
+        }
+      },
+      "body": {
+        "type": "text",
+        "analyzer": "newsradar_analyzer"
+      },
+      "published_at": {
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis"
+      },
+      "ingested_at": {
+        "type": "date",
+        "format": "strict_date_optional_time||epoch_millis"
+      },
+      "topic": {
+        "type": "keyword"
+      },
+      "topic_confidence": {
+        "type": "float"
+      },
+      "sentiment_label": {
+        "type": "keyword"
+      },
+      "sentiment_score": {
+        "type": "float"
+      },
+      "language": {
+        "type": "keyword"
+      },
+      "source_type": {
+        "type": "keyword"
+      }
+    }
+  }
+}
