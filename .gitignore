@@ -1,33 +1,38 @@
-# Racine monorepo TP (tp-airflow + Projet_Airflow)
+### IntelliJ IDEA ###
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+.kotlin
 
-# Secrets / env
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
 .env
-.env.*
-!.env.example
+vsc.xml
 
-# Python
+# Airflow logs (chemins run_id avec ':' incompatibles Windows ; ne pas versionner)
+logs/
 __pycache__/
 *.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-.venv/
-venv/
-
-# Airflow / Docker — logs locaux (chemins parfois invalides sous Windows)
-logs/
-*.log
-
-# IDE / OS
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# GitKraken / outils locaux (optionnel)
-.gk/
-
-# Archives redondantes avec le code versionné (décompresser ailleurs si besoin)
 *.zip
